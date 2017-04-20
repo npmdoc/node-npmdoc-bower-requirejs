@@ -1,0 +1,216 @@
+<div class="apidocDiv">
+<style>
+/*csslint
+*/
+.apidocDiv {
+    background: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+}
+.apidocDiv a[href] {
+    color: #33f;
+    font-weight: bold;
+    text-decoration: none;
+}
+.apidocDiv a[href]:hover {
+    text-decoration: underline;
+}
+.apidocCodeCommentSpan {
+    background: #bbf;
+    color: #000;
+    display: block;
+}
+.apidocCodeKeywordSpan {
+    color: #d00;
+    font-weight: bold;
+}
+.apidocCodePre {
+    background: #eef;
+    border: 1px solid;
+    color: #777;
+    padding: 5px;
+    white-space: pre-wrap;
+}
+.apidocFooterDiv {
+    margin-top: 20px;
+    text-align: center;
+}
+.apidocModuleLi {
+    margin-top: 10px;
+}
+.apidocSectionDiv {
+    border-top: 1px solid;
+    margin-top: 20px;
+}
+.apidocSignatureSpan {
+    color: #777;
+    font-weight: bold;
+}
+</style>
+<h1>api documentation for
+    <a
+
+    >bower-requirejs (v1.2.0)</a>
+</h1>
+<h4>Automagically wire-up installed Bower components into your RequireJS config</h4>
+<div class="apidocSectionDiv"><a
+    href="#apidoc.tableOfContents"
+    id="apidoc.tableOfContents"
+><h1>table of contents</h1></a><ol>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.bower-requirejs">module bower-requirejs</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.bower-requirejs.bower-requirejs">
+            function <span class="apidocSignatureSpan"></span>bower-requirejs
+            <span class="apidocSignatureSpan">(opts, done)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+</ol></div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.bower-requirejs" id="apidoc.module.bower-requirejs">module bower-requirejs</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.bower-requirejs.bower-requirejs" id="apidoc.element.bower-requirejs.bower-requirejs">
+        function <span class="apidocSignatureSpan"></span>bower-requirejs
+        <span class="apidocSignatureSpan">(opts, done)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">bower-requirejs = function (opts, done) {
+  opts = opts || {};
+
+  var bowerOpts = _.extend({offline: true}, opts.bowerOpts);
+
+  var configDir;
+  var config;
+  var baseUrl = opts.baseUrl;
+  var configPath = opts.config;
+
+  if (configPath) {
+    configDir = path.dirname(configPath);
+    baseUrl = baseUrl || configDir;
+
+    // Grab the config file, or create one if it doesn&#x27;t exist
+    if (file.exists(configPath)) {
+      config = fs.readFileSync(String(configPath), &#x27;utf8&#x27;);
+    } else {
+      config = fs.readFileSync(path.join(__dirname, &#x27;../templates/config.js&#x27;), &#x27;utf8&#x27;);
+    }
+  } else {
+    baseUrl = baseUrl || &#x27;./&#x27;;
+  }
+
+  if (!done) {
+    done = function () {};
+  }
+
+  function run() {
+    bower.commands.list({}, bowerOpts)
+      .on(&#x27;end&#x27;, function (dependencyGraph) {
+        if (dependencyGraph) {
+          var generatedConfig;
+
+          try {
+            generatedConfig = buildConfig(dependencyGraph, _.extend(opts, {
+              baseUrl: baseUrl
+            }));
+          } catch (err) {
+            return done(false);
+          }
+
+          if (configPath) {
+            writeConfig(generatedConfig);
+          } else {
+            done(generatedConfig);
+          }
+        }
+      })
+      .on(&#x27;error&#x27;, function (err) {
+        console.error(danger(&#x27;ERR&#x27;), process.argv.slice(2).join(&#x27; &#x27;), &#x27;\n&#x27;);
+        console.error(opts.debug ? err.stack : err.message);
+        process.exit(err.code || 1);
+      });
+  }
+
+<span class="apidocCodeCommentSpan">  /**
+   * Write all dependencies to rjs config file
+   */
+</span>  // @TODO: should maybe make this &#x27;mergeConfig&#x27;?
+  function writeConfig(generatedConfig) {
+    var rjsConfig;
+    requirejs.tools.useLib(function (require) {
+      rjsConfig = require(&#x27;transform&#x27;).modifyConfig(config, function (config) {
+
+        // If the original config defines paths, add the
+        // bower component paths to it; otherwise, add a
+        // paths map with the bower components.
+        // @TODO: CHECK FOR CONFLICTS WITH EXISTING PATHS
+        if (generatedConfig.paths) {
+          if (config.paths) {
+            assign(config.paths, generatedConfig.paths);
+          } else {
+            config.paths = generatedConfig.paths;
+          }
+        }
+
+        // Add packages to merged config.
+        if (generatedConfig.packages) {
+          if (!config.packages) {
+            config.packages = [];
+          }
+
+          // strip packages that are already added
+          var generatedPackages = _.filter(generatedConfig.packages, function(pkg) {
+            return typeof _.find(config.packages, function(installedPkg) {
+                return installedPkg.name === pkg.name;
+              }) === &#x27;undefined&#x27;;
+          });
+
+          config.packages = config.packages.concat(generatedPackages);
+        }
+
+        if (generatedConfig.shim) {
+          if (config.shim) {
+            _.forOwn(generatedConfig.shim, function (value, key) {
+              if (config.shim[key]) {
+                config.shim[key].deps = _.union(value.deps, config.shim[key].deps);
+              } else {
+                config.shim[key] = value;
+              }
+            });
+          } else {
+            config.shim = generatedConfig.shim;
+          }
+        }
+
+        return config;
+      });
+
+      fs.writeFileSync(configPath, rjsConfig, &#x27;utf-8&#x27;);
+      console.log(success(&#x27;Updated RequireJS config with installed Bower components&#x27;));
+
+      done(generatedConfig);
+    });
+  }
+
+  run();
+}</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocFooterDiv">
+    [ this document was created with
+    <a href="https://github.com/kaizhu256/node-utility2" target="_blank">utility2</a>
+    ]
+</div>
+</div>
